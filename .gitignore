@@ -1,21 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-.env
-venv/
-env/
-.venv/
+# HuggingFace model cache
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+models/
+huggingface/
+.cache/
+sentence_transformers/
 
-# FAISS index files (large)
+# FAISS index
 *.index
 faiss_index/
 
-# API keys / secrets
+# Env
 .env
-secrets.toml
 .streamlit/secrets.toml
-
-# OS
-.DS_Store
-Thumbs.db

@@ -1,17 +1,21 @@
-# HuggingFace model cache
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# HuggingFace / model files
 *.safetensors
 *.bin
-*.pt
-*.ckpt
-models/
-huggingface/
-.cache/
-sentence_transformers/
+vectorstore/
+embeddings/
 
-# FAISS index
-*.index
-faiss_index/
+# Streamlit
+.streamlit/secrets.toml
 
 # Env
 .env
-.streamlit/secrets.toml

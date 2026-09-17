@@ -1,12 +1,14 @@
 """
 NLP Engine — CareerLens AI
-Uses spaCy for fast, local, zero-cost skill extraction from resume + JD text.
+Fast, local, zero-cost skill extraction from resume + JD text using a
+curated skills gazetteer with word-boundary phrase matching.
 
-Why spaCy instead of asking the LLM?
+Why a gazetteer instead of asking the LLM?
   - Runs locally — no API call, no token cost
   - Deterministic — same input always gives same output
   - Fast — processes a resume in milliseconds
-  - LLMs sometimes miss exact technical keywords; spaCy + PhraseMatcher never does
+  - LLMs sometimes miss or hallucinate exact technical keywords; exact
+    phrase matching against a known vocabulary never does
 
 What this file produces:
   - Skills found in resume
@@ -20,25 +22,17 @@ What this file produces:
 """
 
 import re
-import spacy
 from typing import List
 
-# ── Load spaCy model ──────────────────────────────────────────────────────────
-# en_core_web_sm is a small 12MB English model — downloads once via:
-#   python -m spacy download en_core_web_sm
-# It handles tokenization, POS tagging, NER (Named Entity Recognition)
-
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    raise OSError(
-        "spaCy model not found. Run: python -m spacy download en_core_web_sm"
-    )
+# Note: an earlier version loaded spaCy's en_core_web_sm here. It was removed
+# because nothing in this module used it — skill extraction is a gazetteer
+# (see extract_skills below), and the remaining extractors are regex based.
+# Dropping it cut ~200MB from the deployment build with no behaviour change.
 
 
 # ── Skills Taxonomy ───────────────────────────────────────────────────────────
 # This is the master list of tech skills we detect.
-# PhraseMatcher will scan resume + JD text for exact matches (case-insensitive).
+# We scan resume + JD text for exact matches (case-insensitive, word-boundary).
 # You can add more skills here anytime — just add to the right category.
 
 SKILLS_TAXONOMY = {
@@ -129,10 +123,10 @@ def extract_skills(text: str) -> List[str]:
       2. For each skill in our taxonomy, check if it appears in the text
       3. Return all matches
 
-    Why not use spaCy NER here?
-      spaCy's built-in NER (Named Entity Recognition) finds people, places,
+    Why not use a general-purpose NER model here?
+      Off-the-shelf NER (Named Entity Recognition) finds people, places and
       organisations — not tech skills. For tech skills we use our own
-      vocabulary (SKILLS_TAXONOMY) with simple string matching.
+      vocabulary (SKILLS_TAXONOMY) with word-boundary string matching.
       This is called a "gazetteer" approach — common in production NLP systems.
     """
     text_lower = _normalize(text)

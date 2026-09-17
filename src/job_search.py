@@ -2,7 +2,8 @@
 Job Search Engine - Fetches LIVE job openings matched to the candidate's resume.
 
 Sources:
-1. Adzuna API (primary)   - free tier, needs ADZUNA_APP_ID + ADZUNA_APP_KEY in .env
+1. Adzuna API (primary)   - free tier, needs ADZUNA_APP_ID + ADZUNA_APP_KEY
+   (from .env locally, or the Secrets panel when deployed)
    Sign up free at: https://developer.adzuna.com/
 2. Remotive API (fallback) - free, no key required, remote tech jobs only
 
@@ -11,22 +12,34 @@ a listing came from:
     {title, company, location, salary, posted, url, source}
 """
 
-import os
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from src.config import get_secret
+except ImportError:            # when this file is run directly from inside src/
+    from config import get_secret
 
-ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID", "").strip()
-ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "").strip()
-ADZUNA_COUNTRY = os.getenv("ADZUNA_COUNTRY", "in").strip() or "in"   # "in" = India
+# Read lazily, not at import time. On a deployed app the secrets may be set or
+# changed after the module is first imported, and module-level constants would
+# freeze the old (empty) values until a full reboot.
+
+def _adzuna_id() -> str:
+    return get_secret("ADZUNA_APP_ID")
+
+
+def _adzuna_key() -> str:
+    return get_secret("ADZUNA_APP_KEY")
+
+
+def _adzuna_country() -> str:
+    return get_secret("ADZUNA_COUNTRY", "in") or "in"   # "in" = India
 
 REMOTIVE_URL = "https://remotive.com/api/remote-jobs"
 REQUEST_TIMEOUT = 10
 
 
 def _adzuna_url() -> str:
-    return f"https://api.adzuna.com/v1/api/jobs/{ADZUNA_COUNTRY}/search/1"
+    return f"https://api.adzuna.com/v1/api/jobs/{_adzuna_country()}/search/1"
 
 
 def _format_salary(lo, hi) -> str:
@@ -38,7 +51,7 @@ def _format_salary(lo, hi) -> str:
 
 
 def adzuna_configured() -> bool:
-    return bool(ADZUNA_APP_ID and ADZUNA_APP_KEY)
+    return bool(_adzuna_id() and _adzuna_key())
 
 
 def search_adzuna(query: str, location: str = "", results: int = 15) -> list:
@@ -47,8 +60,8 @@ def search_adzuna(query: str, location: str = "", results: int = 15) -> list:
         return []
 
     params = {
-        "app_id": ADZUNA_APP_ID,
-        "app_key": ADZUNA_APP_KEY,
+        "app_id": _adzuna_id(),
+        "app_key": _adzuna_key(),
         "what": query,
         "results_per_page": results,
         "content-type": "application/json",

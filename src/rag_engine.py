@@ -44,6 +44,11 @@ from llama_index.core import (
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.core.node_parser import SentenceSplitter
 
+try:
+    from src.config import writable_dir
+except ImportError:            # when this file is run directly from inside src/
+    from config import writable_dir
+
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -51,8 +56,8 @@ EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"   # 384-dim, runs on CPU, free
 VECTOR_DIM       = 384
 CHUNK_SIZE       = 512
 CHUNK_OVERLAP    = 64
-CHROMA_DIR       = Path("chroma_db")           # ChromaDB saves here on disk
-EMBED_CACHE_DIR  = Path("vectorstore/embeddings")
+CHROMA_DIR       = writable_dir("chroma_db", "careerlens_chroma_db")
+EMBED_CACHE_DIR  = writable_dir("vectorstore/embeddings", "careerlens_embeddings")
 
 
 # ── PDF Extraction ────────────────────────────────────────────────────────────

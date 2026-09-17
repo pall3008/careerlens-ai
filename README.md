@@ -2,7 +2,7 @@
 
 ### Hybrid RAG · NLP Skill Extraction · Voice Interview · MCP Server · Live Jobs
 
-> **Stack:** Groq API · LlamaIndex · ChromaDB · BM25 · spaCy · Whisper · FastMCP · Streamlit · Adzuna/Remotive
+> **Stack:** Groq API · LlamaIndex · ChromaDB · BM25 · BGE embeddings · Whisper · FastMCP · Streamlit · Adzuna/Remotive
 
 ---
 
@@ -11,7 +11,7 @@
 CareerLens AI is a resume analysis and interview preparation tool built on a hybrid RAG pipeline. Upload your resume PDF, paste a job description, and the system runs through 7 steps:
 
 1. **Upload** — PDF parsed with PyMuPDF, text extracted
-2. **Skills Map** — spaCy NLP extracts skills locally (no API call), compares resume vs JD, shows overlap %
+2. **Skills Map** — local NLP extracts skills against a 500+ term gazetteer (no API call), compares resume vs JD, shows overlap %
 3. **Analysis** — Groq LLM gives match score, strengths, gaps, missing keywords
 4. **Resume Audit** — section-by-section health check with auto-rewrite
 5. **Live Jobs** — real listings from Adzuna + Remotive matched to your profile
@@ -27,8 +27,8 @@ Resume PDF + Job Description
          │
          ▼
 ┌─────────────────────────────────────────┐
-│  NLP Layer (spaCy)                      │
-│  Skill extraction · Gap analysis · NER  │
+│  NLP Layer (gazetteer + regex)          │
+│  Skill extraction · Gap analysis        │
 │  Runs locally — zero API cost           │
 └─────────────┬───────────────────────────┘
               │
@@ -72,7 +72,7 @@ Resume PDF + Job Description
 |---|---|
 | ChromaDB over FAISS | Persistent to disk — same resume doesn't re-embed on restart. Native metadata filtering for source-scoped retrieval. |
 | BM25 + semantic hybrid | Semantic search misses exact skill names ("FastAPI", "Node.js"). BM25 catches exact keyword matches. Combined with RRF gives best of both. |
-| spaCy before LLM | Skill extraction is deterministic and fast locally. No API cost, no hallucination risk for structured data like skill names. |
+| Gazetteer before LLM | Skill extraction is deterministic and fast locally. No API cost, no hallucination risk for structured data like skill names. Tech skills are a closed, known set, so a curated vocabulary beats a statistical NER model here — and it ships no model weights. |
 | Source-scoped retrieval | Resume and JD chunks were leaking into each other. Metadata filtering ensures resume-only and JD-only retrieval stays clean. |
 | Whisper local STT | Zero API cost, full privacy. Runs on CPU. 74MB model, downloads once. |
 | FastMCP server | Any MCP-compatible AI assistant (Claude Desktop, Cursor) can call CareerLens tools as plugins. |
@@ -88,12 +88,15 @@ careerlens/
 ├── src/
 │   ├── rag_engine.py       # ChromaDB + BM25 hybrid RAG + Reciprocal Rank Fusion
 │   ├── llm_agent.py        # All Groq API calls — structured JSON prompts
-│   ├── nlp_engine.py       # spaCy skill extractor — 500+ skill vocabulary
+│   ├── nlp_engine.py       # local skill extractor — 500+ skill vocabulary
 │   ├── mcp_server.py       # FastMCP server — 6 tools for MCP protocol
 │   └── job_search.py       # Live job search — Adzuna + Remotive APIs
 ├── chroma_db/              # ChromaDB persists vectors here (git-ignored)
 ├── vectorstore/            # BGE-small model cache (git-ignored)
-├── requirements.txt
+├── .streamlit/
+│   └── config.toml         # Streamlit settings (committed; secrets.toml is not)
+├── requirements.txt        # deployment build — local-only extras at the bottom
+├── .env.example            # template — copy to .env and fill in
 ├── .env                    # Your API keys (git-ignored — never commit this)
 └── README.md
 ```
@@ -109,7 +112,11 @@ cd careerlens
 python -m venv .venv
 .venv\Scripts\Activate.ps1   # Windows PowerShell
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
+
+# Optional — only needed for voice interview, the MCP server, and RAG eval.
+# These are deliberately left out of requirements.txt so the free-tier
+# deployment stays under its memory limit.
+pip install openai-whisper streamlit-mic-recorder soundfile fastmcp ragas
 ```
 
 ### 2. Get free API keys
@@ -160,7 +167,7 @@ Then connect from Claude Desktop or any MCP client.
 | Embeddings | BGE-small (local) | Free |
 | Vector DB | ChromaDB (local) | Free |
 | Keyword search | BM25 (pure Python) | Free |
-| NLP | spaCy en_core_web_sm | Free |
+| NLP | Gazetteer + regex (pure Python) | Free |
 | Speech-to-text | Whisper base (local) | Free |
 | MCP server | FastMCP | Free |
 | Job boards | Adzuna free + Remotive | Free |
@@ -170,7 +177,7 @@ Then connect from Claude Desktop or any MCP client.
 
 ## How to Talk About This in Interviews
 
-*"CareerLens AI is a resume analysis tool I built using a hybrid RAG pipeline. I store resume and job description chunks in ChromaDB for persistence, and retrieve them using both BM25 keyword search and semantic vector search combined through Reciprocal Rank Fusion — this ensures I catch exact technical skill names that pure semantic search sometimes misses. Before calling the LLM, I run spaCy locally to extract skills deterministically from both documents, giving me a fast skill gap analysis with no API cost. The LLM layer uses Groq with structured JSON prompts for analysis, audit, and interview question generation. For the interview step, users can speak their answer — Whisper transcribes it locally with no API call. I also built a FastMCP server that exposes all features as MCP tools, so any MCP-compatible AI assistant like Claude can use CareerLens as a plugin."*
+*"CareerLens AI is a resume analysis tool I built using a hybrid RAG pipeline. I store resume and job description chunks in ChromaDB for persistence, and retrieve them using both BM25 keyword search and semantic vector search combined through Reciprocal Rank Fusion — this ensures I catch exact technical skill names that pure semantic search sometimes misses. Before calling the LLM, I extract skills locally with a curated gazetteer of 500+ tech terms matched on word boundaries — deterministic, millisecond-fast, and zero API cost. I originally reached for spaCy here, then realised a statistical NER model adds nothing when the entity set is closed and known, so I dropped the dependency and the deployment got 200MB lighter. The LLM layer uses Groq with structured JSON prompts for analysis, audit, and interview question generation. For the interview step, users can speak their answer — Whisper transcribes it locally with no API call. I also built a FastMCP server that exposes all features as MCP tools, so any MCP-compatible AI assistant like Claude can use CareerLens as a plugin."*
 
 ---
 
@@ -185,7 +192,7 @@ Then connect from Claude Desktop or any MCP client.
 
 ## Future Improvements
 
-- [ ] Deploy to Hugging Face Spaces (free hosting)
+- [x] Deploy to Streamlit Community Cloud (Hugging Face Spaces no longer offers a free Streamlit SDK — Gradio and Docker Spaces now require a paid plan)
 - [ ] Add cover letter generator
 - [ ] LinkedIn job scraping
 - [ ] Sentence-BERT cross-encoder reranker after hybrid retrieval

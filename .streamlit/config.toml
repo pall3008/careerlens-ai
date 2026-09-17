@@ -1,0 +1,12 @@
+# Streamlit configuration — committed to git.
+# Secrets belong in .streamlit/secrets.toml, which is git-ignored.
+
+[server]
+# torch's custom module __path__ confuses Streamlit's file watcher and can throw
+# "RuntimeError: Tried to instantiate class __path__._path" on reload.
+# Disabling the watcher is the standard fix. This replaces the local flag:
+#   streamlit run app.py --server.fileWatcherType none
+fileWatcherType = "none"
+
+[theme]
+base = "dark"

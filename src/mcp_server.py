@@ -201,7 +201,7 @@ def extract_resume_skills(
     job_description: str,
 ) -> dict:
     """
-    Extract and compare skills using NLP (spaCy) — no LLM call needed.
+    Extract and compare skills using local NLP (gazetteer matching) — no LLM call needed.
 
     Faster and cheaper than the LLM-based analysis for skill gap detection.
     Returns matched skills, missing skills, and overlap percentage.

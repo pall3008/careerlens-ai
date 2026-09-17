@@ -3,10 +3,20 @@ CareerLens AI v2 — Hybrid RAG + NLP + MCP + Voice Interview
 New in v2:
   - ChromaDB persistent vector store (replaces FAISS)
   - BM25 + semantic hybrid search with Reciprocal Rank Fusion
-  - spaCy NLP skill extractor (Skills Map step)
+  - Local NLP skill extractor — gazetteer matching (Skills Map step)
   - Whisper voice transcription for interview answers
   - FastMCP server (run separately: python src/mcp_server.py)
 """
+
+# ChromaDB needs sqlite3 >= 3.35. Some hosts (Streamlit Community Cloud among
+# them) ship an older build. If pysqlite3-binary is installed we swap it in
+# before anything imports chromadb. No-op locally, where sqlite is new enough.
+try:
+    import sys
+    __import__("pysqlite3")
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
 
 import streamlit as st
 import sys
@@ -26,7 +36,7 @@ from src.llm_agent import (
     rewrite_resume_section,
 )
 from src.job_search import get_job_matches
-from src.nlp_engine import analyze_skills   # NEW — spaCy skill extractor
+from src.nlp_engine import analyze_skills   # local skill extractor — no LLM call
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 
@@ -260,7 +270,7 @@ def init_state():
         "rewrites":        {},
         "job_query_val":   "",
         "job_loc_val":     "",
-        "nlp_result":      None,   # NEW — spaCy analysis result
+        "nlp_result":      None,   # local NLP skill analysis result
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -401,7 +411,7 @@ with st.sidebar:
         "📚 LlamaIndex + ChromaDB",
         "🔍 BM25 Hybrid Search",
         "🔤 BGE-small Embeddings",
-        "🧬 spaCy NLP (NER)",
+        "🧬 Local NLP (gazetteer)",
         "🎙️ Whisper (Voice STT)",
         "🔌 FastMCP Server",
         "🔎 Adzuna + Remotive",
@@ -490,7 +500,7 @@ if st.session_state.step == "upload":
                 st.session_state.resume_context = rag.get_resume_chunks()
                 st.session_state.jd_context     = rag.get_jd_chunks()
 
-            with st.spinner("🧬 Running spaCy NLP skill extraction..."):
+            with st.spinner("🧬 Running local NLP skill extraction..."):
                 st.session_state.nlp_result = analyze_skills(
                     st.session_state.resume_text,
                     st.session_state.jd_text,
@@ -505,7 +515,7 @@ if st.session_state.step == "upload":
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 2 — SKILLS MAP (NEW — spaCy NLP)
+# STEP 2 — SKILLS MAP (local NLP — gazetteer matching)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif st.session_state.step == "skills":
@@ -515,7 +525,7 @@ elif st.session_state.step == "skills":
     st.markdown(f"""
 <div class="section-eyebrow">Step 2 of 7 · NLP Analysis · {st.session_state.job_title}</div>
 <div class="section-title">Skills Map</div>
-<div class="section-sub">Extracted by spaCy locally — no LLM call, instant results.</div>
+<div class="section-sub">Extracted locally — no LLM call, instant results.</div>
 """, unsafe_allow_html=True)
 
     # ── Top metrics ──
@@ -582,7 +592,7 @@ elif st.session_state.step == "skills":
     st.markdown("""
 <div style='margin-top:1.5rem;padding:1rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;font-size:0.85rem;color:#6b7280'>
     <strong style='color:#9ca3af'>🧬 How this works:</strong>
-    spaCy scans your resume and JD text using a 500+ skill vocabulary (PhraseMatcher).
+    Your resume and JD text are scanned against a 500+ skill vocabulary using exact phrase matching.
     Green = skill found in both. Red = JD requires it but your resume doesn't mention it.
     This runs locally in milliseconds — no API call, no token cost.
 </div>

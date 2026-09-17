@@ -8,9 +8,11 @@ import os
 import json
 import re
 from groq import Groq
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from src.config import get_secret
+except ImportError:            # when this file is run directly from inside src/
+    from config import get_secret
 
 # ── Config ────────────────────────────────────────────────────────────────────
 MODEL       = "openai/gpt-oss-20b"    # available on your Groq account, good JSON output
@@ -21,9 +23,14 @@ TEMPERATURE = 0.7
 # ── Client ────────────────────────────────────────────────────────────────────
 
 def get_client() -> Groq:
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = get_secret("GROQ_API_KEY")
     if not api_key:
-        raise ValueError("GROQ_API_KEY not found. Copy .env.example → .env and add your key.")
+        raise ValueError(
+            "GROQ_API_KEY not found.\n"
+            "  Running locally: copy .env.example to .env and add your key.\n"
+            "  Deployed:        add it under App settings -> Secrets, then reboot the app.\n"
+            "  Free key at:     https://console.groq.com"
+        )
     return Groq(api_key=api_key)
 
 

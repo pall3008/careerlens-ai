@@ -1,157 +1,193 @@
-# 🎯 CareerLens AI
-### RAG-Powered Resume Analyzer + Interview Prep Agent + Live Job Matcher
+# 🎯 CareerLens AI — v2
 
-> **Built with:** Groq (Llama-3.3-70B) · LlamaIndex · FAISS · HuggingFace Embeddings · Streamlit · Adzuna/Remotive
+### Hybrid RAG · NLP Skill Extraction · Voice Interview · MCP Server · Live Jobs
+
+> **Stack:** Groq API · LlamaIndex · ChromaDB · BM25 · spaCy · Whisper · FastMCP · Streamlit · Adzuna/Remotive
 
 ---
 
-## 🚀 What This Project Does
+## What This Does
 
-CareerLens AI is a **production-quality AI engineering project** that combines:
+CareerLens AI is a resume analysis and interview preparation tool built on a hybrid RAG pipeline. Upload your resume PDF, paste a job description, and the system runs through 7 steps:
 
-- **RAG (Retrieval-Augmented Generation)** — Your resume + job description are chunked, embedded, and stored in a FAISS vector store. Relevant chunks are retrieved *per-source* (resume-only / JD-only) for each LLM call.
-- **LLM Agent** — Groq's Llama-3.3-70B performs structured analysis, generates personalized interview questions, evaluates your answers, and distills your resume into a real job-search query.
-- **Agentic Loop** — The interview prep section creates an interactive agent loop: question → your answer → AI feedback → next question.
-- **Live Job Matching** — Your resume is turned into a search query and sent to real job board APIs (Adzuna + Remotive) to surface current openings with direct apply links.
+1. **Upload** — PDF parsed with PyMuPDF, text extracted
+2. **Skills Map** — spaCy NLP extracts skills locally (no API call), compares resume vs JD, shows overlap %
+3. **Analysis** — Groq LLM gives match score, strengths, gaps, missing keywords
+4. **Resume Audit** — section-by-section health check with auto-rewrite
+5. **Live Jobs** — real listings from Adzuna + Remotive matched to your profile
+6. **Interview Prep** — 10 personalized questions, type OR speak your answer (Whisper transcribes locally)
+7. **Career Chat** — RAG-powered freeform Q&A about your resume and target role
 
-### Key Features
-| Feature | Description |
+---
+
+## Architecture
+
+```
+Resume PDF + Job Description
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│  NLP Layer (spaCy)                      │
+│  Skill extraction · Gap analysis · NER  │
+│  Runs locally — zero API cost           │
+└─────────────┬───────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────┐
+│  RAG Engine v2                          │
+│  PyMuPDF → chunk → BGE-small embed      │
+│  ChromaDB (persistent to disk)          │
+│  BM25 + semantic hybrid retrieval       │
+│  Reciprocal Rank Fusion merge           │
+│  Source-scoped (resume ≠ JD chunks)     │
+└─────────────┬───────────────────────────┘
+              │  relevant chunks
+              ▼
+┌─────────────────────────────────────────┐    ┌──────────────────────────┐
+│  LLM Agent (Groq API)                   │───▶│  Job Search Engine        │
+│  Structured JSON prompts                │    │  Adzuna (India + global)  │
+│  Analysis · Audit · Questions · Chat    │    │  Remotive (remote, free)  │
+└─────────────┬───────────────────────────┘    └──────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────┐
+│  FastMCP Server (mcp_server.py)         │
+│  6 tools exposed as MCP protocol        │
+│  Claude / Cursor / any MCP client       │
+└─────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────┐
+│  Streamlit UI (7-step flow)             │
+│  Voice input via Whisper (local STT)    │
+│  Skills Map · Audit · Jobs · Interview  │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Key Engineering Decisions
+
+| Decision | Why |
 |---|---|
-| 📊 Resume Analysis | Match score (0-100), strengths, gaps, missing keywords |
-| 🔎 Live Job Matches | Real current openings sourced from job boards, with apply links — built from your resume's actual skills |
-| 🎤 Interview Questions | 10 personalized questions (Technical + Behavioral + Gap-based) |
-| 🤖 Answer Evaluation | Score your answer, give model answer + STAR tips |
-| 💬 Career Chat | RAG-powered freeform Q&A about your resume + role |
+| ChromaDB over FAISS | Persistent to disk — same resume doesn't re-embed on restart. Native metadata filtering for source-scoped retrieval. |
+| BM25 + semantic hybrid | Semantic search misses exact skill names ("FastAPI", "Node.js"). BM25 catches exact keyword matches. Combined with RRF gives best of both. |
+| spaCy before LLM | Skill extraction is deterministic and fast locally. No API cost, no hallucination risk for structured data like skill names. |
+| Source-scoped retrieval | Resume and JD chunks were leaking into each other. Metadata filtering ensures resume-only and JD-only retrieval stays clean. |
+| Whisper local STT | Zero API cost, full privacy. Runs on CPU. 74MB model, downloads once. |
+| FastMCP server | Any MCP-compatible AI assistant (Claude Desktop, Cursor) can call CareerLens tools as plugins. |
+| BGE-small embeddings | Runs locally on CPU. No OpenAI embedding API cost. 384-dim vectors, good quality for English text. |
 
 ---
 
-## 🏗️ Architecture
-
-```
-User uploads PDF + JD
-        │
-        ▼
-┌─────────────────────┐
-│   PDF Parser        │  PyMuPDF → raw text
-│   (PyMuPDF)         │
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   RAG Engine        │  LlamaIndex chunks text
-│   (LlamaIndex)      │  BGE-small embeds chunks
-│                     │  FAISS stores vectors
-│                     │  Source-scoped retrieval (resume-only / JD-only)
-└────────┬────────────┘
-         │  retrieve relevant chunks
-         ▼
-┌─────────────────────┐      ┌──────────────────────┐
-│   LLM Agent         │─────▶│   Job Search Engine   │
-│   (Groq API)        │      │   (Adzuna + Remotive) │
-│   Structured JSON    │      │   Live listings + links│
-└────────┬────────────┘      └──────────────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│   Streamlit UI      │  5-step flow incl. Job Matches
-│                     │  Interactive agent loop
-└─────────────────────┘
-```
-
----
-
-## ⚙️ Setup (5 minutes)
-
-### 1. Install dependencies
-```bash
-cd careerlens
-pip install -r requirements.txt
-```
-
-### 2. Get your FREE Groq API key
-- Go to [console.groq.com](https://console.groq.com)
-- Sign up (free) → Create API Key
-- Copy your key
-
-### 3. (Optional, recommended) Get a FREE Adzuna API key for full job coverage
-- Go to [developer.adzuna.com](https://developer.adzuna.com/)
-- Sign up free (no credit card) → grab your `app_id` and `app_key`
-- Without this, the Job Matches tab still works using Remotive (remote tech jobs only, no key required)
-
-### 4. Set up environment
-```bash
-cp .env.example .env
-# Edit .env and paste your GROQ_API_KEY (and optionally ADZUNA_APP_ID / ADZUNA_APP_KEY)
-```
-⚠️ **Never commit `.env` to git** — it's already covered by `.gitignore`. If a key was ever shared or committed by mistake, rotate it from the provider's dashboard.
-
-### 5. Run
-```bash
-streamlit run app.py
-```
-Open `http://localhost:8501` in your browser.
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 careerlens/
-├── app.py                  # Streamlit UI (5-step flow)
+├── app.py                  # Streamlit UI — 7-step flow with Skills Map + voice
 ├── src/
-│   ├── rag_engine.py       # PDF parsing, FAISS index, source-scoped retrieval
-│   ├── llm_agent.py        # All Groq API calls + prompt engineering
-│   └── job_search.py       # Live job board search (Adzuna + Remotive)
+│   ├── rag_engine.py       # ChromaDB + BM25 hybrid RAG + Reciprocal Rank Fusion
+│   ├── llm_agent.py        # All Groq API calls — structured JSON prompts
+│   ├── nlp_engine.py       # spaCy skill extractor — 500+ skill vocabulary
+│   ├── mcp_server.py       # FastMCP server — 6 tools for MCP protocol
+│   └── job_search.py       # Live job search — Adzuna + Remotive APIs
+├── chroma_db/              # ChromaDB persists vectors here (git-ignored)
+├── vectorstore/            # BGE-small model cache (git-ignored)
 ├── requirements.txt
-├── .env.example
+├── .env                    # Your API keys (git-ignored — never commit this)
 └── README.md
 ```
 
 ---
 
-## 🔑 Key Technical Concepts Demonstrated
+## Setup (5 minutes)
 
-1. **RAG Pipeline** — Document ingestion → chunking → embedding → vector storage → source-scoped semantic retrieval
-2. **Prompt Engineering** — Structured JSON output, few-shot examples, role-based system prompts
-3. **Agentic Loop** — Multi-turn conversation with state management, context injection
-4. **Vector Search** — FAISS IndexFlatL2, cosine similarity, top-k retrieval, client-side metadata filtering
-5. **External API Integration** — Live job board APIs (Adzuna, Remotive) driven by LLM-extracted search intent
-6. **Free Stack** — 100% free APIs (Groq free tier + HuggingFace local embeddings + Adzuna/Remotive free tiers)
+### 1. Clone and create environment
+```bash
+git clone <repo-url>
+cd careerlens
+python -m venv .venv
+.venv\Scripts\Activate.ps1   # Windows PowerShell
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+```
+
+### 2. Get free API keys
+
+**Groq (required)** — [console.groq.com](https://console.groq.com) → free signup → create API key
+
+**Adzuna (optional, recommended)** — [developer.adzuna.com](https://developer.adzuna.com/) → free signup → grab app_id and app_key. Without this, jobs still show via Remotive (remote only).
+
+### 3. Set up .env
+```bash
+GROQ_API_KEY=your_groq_key_here
+ADZUNA_APP_ID=your_adzuna_id
+ADZUNA_APP_KEY=your_adzuna_key
+ADZUNA_COUNTRY=in
+```
+
+### 4. Run the app
+```bash
+streamlit run app.py --server.fileWatcherType none
+```
+
+### 5. (Optional) Run the MCP server
+```bash
+python src/mcp_server.py
+```
+Then connect from Claude Desktop or any MCP client.
 
 ---
 
-## 🛠️ Recent Fixes
+## MCP Tools Available
 
-- **Groq model decommissioned**: `llama3-70b-8192` was retired by Groq → updated to `llama-3.3-70b-versatile` everywhere.
-- **Resume/JD context leakage**: retrieval previously searched the whole index regardless of source, so "resume chunks" could silently include JD text and vice versa. Retrieval is now scoped per-source.
-- **Dependency drift**: `requirements.txt` now matches the actually-installed, working package versions.
-
----
-
-## 💡 How to Talk About This in Interviews
-
-> *"I built a RAG-based career assistant using LlamaIndex and FAISS for vector storage. The system takes a resume PDF and job description, chunks them using LlamaIndex's node parser, embeds them with BGE-small from HuggingFace, and retrieves source-scoped context for each LLM call. The LLM layer uses Groq's Llama-3.3-70B API with structured prompt engineering to return JSON for analysis, question generation, and answer evaluation. A separate agent step distills the resume into a real job-search query, which I send to live job board APIs to surface current openings with direct apply links. The interview prep module implements an agentic loop where the LLM evaluates candidate answers and provides structured feedback."*
-
----
-
-## 🔮 Future Improvements (show initiative)
-
-- [ ] Add RAGAS evaluation metrics (faithfulness, answer relevance)
-- [ ] Support multiple resume comparison
-- [ ] Add voice input/output for interview simulation
-- [ ] Deploy to Hugging Face Spaces
-- [ ] Add hybrid search (BM25 + semantic)
-- [ ] Rank job matches by resume-skill overlap score, not just recency
-- [ ] Cache job search results to avoid re-hitting APIs on every rerun
+| Tool | Description |
+|---|---|
+| `analyze_resume` | Match score, strengths, gaps, missing keywords |
+| `audit_resume` | Section-by-section health check + ATS score |
+| `generate_questions` | 10 personalized interview questions |
+| `evaluate_interview_answer` | Score a spoken or typed answer out of 10 |
+| `get_live_jobs` | Live listings from Adzuna + Remotive |
+| `extract_resume_skills` | NLP skill extraction — no LLM call |
 
 ---
 
-## 📚 Resources
+## Tech Stack — 100% Free
 
-- [LlamaIndex Docs](https://docs.llamaindex.ai)
-- [Groq API](https://console.groq.com)
-- [Groq Model Deprecations](https://console.groq.com/docs/deprecations)
-- [FAISS](https://github.com/facebookresearch/faiss)
-- [BGE Embeddings](https://huggingface.co/BAAI/bge-small-en-v1.5)
-- [Adzuna API](https://developer.adzuna.com/)
-- [Remotive API](https://remotive.com/api-documentation)
+| Component | Technology | Cost |
+|---|---|---|
+| LLM | Groq API (free tier) | Free |
+| Embeddings | BGE-small (local) | Free |
+| Vector DB | ChromaDB (local) | Free |
+| Keyword search | BM25 (pure Python) | Free |
+| NLP | spaCy en_core_web_sm | Free |
+| Speech-to-text | Whisper base (local) | Free |
+| MCP server | FastMCP | Free |
+| Job boards | Adzuna free + Remotive | Free |
+| UI | Streamlit | Free |
+
+---
+
+## How to Talk About This in Interviews
+
+*"CareerLens AI is a resume analysis tool I built using a hybrid RAG pipeline. I store resume and job description chunks in ChromaDB for persistence, and retrieve them using both BM25 keyword search and semantic vector search combined through Reciprocal Rank Fusion — this ensures I catch exact technical skill names that pure semantic search sometimes misses. Before calling the LLM, I run spaCy locally to extract skills deterministically from both documents, giving me a fast skill gap analysis with no API cost. The LLM layer uses Groq with structured JSON prompts for analysis, audit, and interview question generation. For the interview step, users can speak their answer — Whisper transcribes it locally with no API call. I also built a FastMCP server that exposes all features as MCP tools, so any MCP-compatible AI assistant like Claude can use CareerLens as a plugin."*
+
+---
+
+## Known Limitations + Production Notes
+
+- **Free tier rate limits**: Groq free tier limits output tokens/minute. `MAX_TOKENS` is set conservatively at 1024. Production deployment would use a paid tier or token-aware chunking.
+- **FAISS → ChromaDB**: v1 used FAISS (in-memory, no persistence). v2 uses ChromaDB which persists to disk — same resume+JD pair never re-embeds.
+- **Whisper model**: First voice use downloads the `base` model (74MB). Cached locally after that.
+- **Scalability**: ChromaDB's local mode works for single-user demo. Multi-user production would use ChromaDB server mode or Pinecone.
+
+---
+
+## Future Improvements
+
+- [ ] Deploy to Hugging Face Spaces (free hosting)
+- [ ] Add cover letter generator
+- [ ] LinkedIn job scraping
+- [ ] Sentence-BERT cross-encoder reranker after hybrid retrieval
+- [ ] RAGAS evaluation metrics on the RAG pipeline
+- [ ] Docker + docker-compose for one-command setup

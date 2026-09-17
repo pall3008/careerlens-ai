@@ -1,13 +1,41 @@
+# ── Core UI ───────────────────────────────────────────────────────────────────
 streamlit>=1.32.0
-groq>=0.9.0
+streamlit-mic-recorder>=0.0.4        # microphone input for voice interview mode
+
+# ── LLM ───────────────────────────────────────────────────────────────────────
+groq>=0.9.0                          # Groq SDK — calls Llama-3.3-70B (free, fast)
+
+# ── RAG Framework ─────────────────────────────────────────────────────────────
 llama-index-core>=0.14.0,<0.15.0
 llama-index-embeddings-huggingface>=0.7.0,<0.8.0
-llama-index-vector-stores-faiss>=0.6.0,<0.7.0
-faiss-cpu>=1.7.4
-PyMuPDF>=1.23.0
-python-dotenv>=1.0.0
+llama-index-vector-stores-chroma>=0.4.0
+llama-index-retrievers-bm25>=0.5.0
+
+# ── Vector Store ──────────────────────────────────────────────────────────────
+chromadb>=0.5.0
+
+# ── Classical NLP ─────────────────────────────────────────────────────────────
+spacy>=3.7.0
+rank-bm25>=0.2.2
+
+# ── Embeddings ────────────────────────────────────────────────────────────────
 transformers>=4.50.0
 sentence-transformers>=2.7.0
-requests>=2.31.0
 torch>=2.0.0
 numpy>=1.24.0
+
+# ── PDF Parsing ───────────────────────────────────────────────────────────────
+PyMuPDF>=1.23.0
+
+# ── Voice / Speech-to-Text ────────────────────────────────────────────────────
+openai-whisper>=20231117
+
+# ── MCP Server ────────────────────────────────────────────────────────────────
+fastmcp>=0.4.0
+
+# ── RAG Evaluation ────────────────────────────────────────────────────────────
+ragas>=0.1.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+requests>=2.31.0
+python-dotenv>=1.0.0

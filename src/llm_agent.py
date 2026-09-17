@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
-MODEL       = "llama-3.3-70b-versatile"
-MAX_TOKENS  = 2048
+MODEL       = "openai/gpt-oss-20b"    # available on your Groq account, good JSON output
+MAX_TOKENS  = 1024                    # safe under free tier limits
 TEMPERATURE = 0.7
 
 

@@ -14,8 +14,17 @@ __pycache__/
 vectorstore/
 embeddings/
 
+# ChromaDB — vector store saved to disk (user-specific, not for git)
+chroma_db/
+
+# Messy folder from earlier session
+{src,data,vectorstore}/
+
+# Whisper model cache
+~/.cache/whisper/
+
 # Streamlit
 .streamlit/secrets.toml
 
-# Env
+# Env — never commit API keys
 .env

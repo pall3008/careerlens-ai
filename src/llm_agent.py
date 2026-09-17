@@ -10,9 +10,19 @@ import re
 from groq import Groq
 
 try:
-    from src.config import get_secret, available_secret_names
+    from src.config import get_secret
 except ImportError:            # when this file is run directly from inside src/
-    from config import get_secret, available_secret_names
+    from config import get_secret
+
+try:
+    from src.config import available_secret_names
+except ImportError:
+    try:
+        from config import available_secret_names
+    except ImportError:
+        # Older config.py without the diagnostic helper.
+        def available_secret_names():
+            return []
 
 # ── Config ────────────────────────────────────────────────────────────────────
 MODEL       = "openai/gpt-oss-20b"    # available on your Groq account, good JSON output

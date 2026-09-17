@@ -37,7 +37,15 @@ from src.llm_agent import (
 )
 from src.job_search import get_job_matches
 from src.nlp_engine import analyze_skills   # local skill extractor — no LLM call
-from src.config import get_secret, available_secret_names
+from src.config import get_secret
+
+try:
+    from src.config import available_secret_names
+except ImportError:
+    # An older src/config.py without the diagnostic helper. That's a missing
+    # nicety, not a reason to take the whole app down at import time.
+    def available_secret_names():
+        return []
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 

@@ -455,15 +455,32 @@ if st.session_state.step == "upload":
     with col1:
         st.markdown("<div style='font-size:0.9rem;font-weight:600;color:#9ca3af;margin-bottom:0.5rem'>📄 Resume (PDF)</div>", unsafe_allow_html=True)
         pdf_file = st.file_uploader("Upload resume PDF", type=["pdf"], label_visibility="collapsed")
-        if pdf_file:
-            resume_text = extract_text_from_pdf(pdf_file.read())
+        if pdf_file is not None:
+            # getvalue(), not read(). read() consumes the buffer, so on the next
+            # rerun — and typing in the JD box reruns on every keystroke — it
+            # returns b"" and extraction silently yields nothing, leaving the
+            # Continue button disabled with a file visibly attached.
+            try:
+                resume_text = extract_text_from_pdf(pdf_file.getvalue())
+            except Exception as e:
+                resume_text = ""
+                st.error(f"Couldn't read that PDF: {e}")
+
             if len(resume_text) < 100:
-                st.error("⚠️ Text too short — PDF may be a scanned image.")
+                st.session_state.resume_text = ""
+                st.error(
+                    f"Only {len(resume_text)} characters of text found. "
+                    "If this is a scanned or image-only PDF, save a text-based "
+                    "copy (in Word: File - Save as - PDF) and upload that instead."
+                )
             else:
                 st.session_state.resume_text = resume_text
                 st.markdown(f"<div class='tag tag-green'>✓ {len(resume_text):,} characters extracted</div>", unsafe_allow_html=True)
                 with st.expander("Preview extracted text"):
                     st.code(resume_text[:600] + "...", language=None)
+        else:
+            # File removed — don't let a stale extraction keep the gate open.
+            st.session_state.resume_text = ""
 
     with col2:
         st.markdown("<div style='font-size:0.9rem;font-weight:600;color:#9ca3af;margin-bottom:0.5rem'>💼 Job Description</div>", unsafe_allow_html=True)

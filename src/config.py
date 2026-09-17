@@ -19,13 +19,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _streamlit_secrets():
+    """Return st.secrets, or None if there's no Streamlit runtime / secrets file."""
+    try:
+        import streamlit as st
+
+        # Touch it once so a missing secrets file raises here, not at the call site.
+        _ = list(st.secrets.keys())
+        return st.secrets
+    except Exception:
+        return None
+
+
 def get_secret(name: str, default: str = "") -> str:
     """
     Read a setting, checking in order:
       1. Environment variables — where python-dotenv puts your local .env, and
          where Streamlit Cloud mirrors top-level secrets.
-      2. st.secrets — fallback for setups where that mirroring doesn't happen.
-      3. The default you passed in.
+      2. st.secrets at the top level.
+      3. st.secrets one level deep, in case the key was pasted under a
+         [section] header in the Secrets box. That nests it, and a top-level
+         lookup would otherwise miss it entirely.
+      4. The default you passed in.
 
     Always returns a stripped string, never None, so callers can use `if not x`.
     """
@@ -33,18 +48,52 @@ def get_secret(name: str, default: str = "") -> str:
     if value and value.strip():
         return value.strip()
 
-    try:
-        import streamlit as st
+    secrets = _streamlit_secrets()
+    if secrets is not None:
+        try:
+            if name in secrets and secrets[name]:
+                return str(secrets[name]).strip()
+        except Exception:
+            pass
 
-        value = st.secrets[name]
-        if value:
-            return str(value).strip()
-    except Exception:
-        # No Streamlit runtime, no secrets file, or no such key. All fine —
-        # this is a fallback path, not the main one.
-        pass
+        # Nested one level: [some_section] \n GROQ_API_KEY = "..."
+        try:
+            for section in secrets.values():
+                if hasattr(section, "keys") and name in section and section[name]:
+                    return str(section[name]).strip()
+        except Exception:
+            pass
 
     return default
+
+
+def available_secret_names() -> list:
+    """
+    Names (never values) of the secrets the app can currently see.
+
+    Purely for error messages: when a key is missing, showing what IS present
+    turns 'not found' into an obvious diagnosis — wrong spelling, wrong case,
+    or nested under a section header.
+    """
+    names = []
+
+    secrets = _streamlit_secrets()
+    if secrets is not None:
+        try:
+            for key, value in secrets.items():
+                if hasattr(value, "keys"):
+                    names.extend(f"{key}.{sub}" for sub in value.keys())
+                else:
+                    names.append(key)
+        except Exception:
+            pass
+
+    # Also surface relevant env vars, without ever revealing a value.
+    for key in os.environ:
+        if any(tag in key.upper() for tag in ("GROQ", "ADZUNA")) and key not in names:
+            names.append(key)
+
+    return sorted(names)
 
 
 def writable_dir(preferred, fallback_name: str) -> Path:

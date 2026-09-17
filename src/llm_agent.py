@@ -10,9 +10,9 @@ import re
 from groq import Groq
 
 try:
-    from src.config import get_secret
+    from src.config import get_secret, available_secret_names
 except ImportError:            # when this file is run directly from inside src/
-    from config import get_secret
+    from config import get_secret, available_secret_names
 
 # ── Config ────────────────────────────────────────────────────────────────────
 MODEL       = "openai/gpt-oss-20b"    # available on your Groq account, good JSON output
@@ -25,10 +25,16 @@ TEMPERATURE = 0.7
 def get_client() -> Groq:
     api_key = get_secret("GROQ_API_KEY")
     if not api_key:
+        visible = available_secret_names()
+        seen = ", ".join(visible) if visible else "none at all"
         raise ValueError(
-            "GROQ_API_KEY not found.\n"
+            "GROQ_API_KEY not found.\n\n"
+            f"Secrets this app can currently see: {seen}\n\n"
             "  Running locally: copy .env.example to .env and add your key.\n"
-            "  Deployed:        add it under App settings -> Secrets, then reboot the app.\n"
+            "  Deployed:        Manage app -> Settings -> Secrets. Paste the key\n"
+            "                   at the TOP of the box, above any [section] header,\n"
+            "                   as:  GROQ_API_KEY = \"gsk_...\"\n"
+            "                   Save, wait ~1 minute, then reboot the app.\n"
             "  Free key at:     https://console.groq.com"
         )
     return Groq(api_key=api_key)

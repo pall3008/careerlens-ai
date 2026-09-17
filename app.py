@@ -37,6 +37,7 @@ from src.llm_agent import (
 )
 from src.job_search import get_job_matches
 from src.nlp_engine import analyze_skills   # local skill extractor — no LLM call
+from src.config import get_secret, available_secret_names
 
 # ── Page Config ───────────────────────────────────────────────────────────────
 
@@ -335,6 +336,34 @@ def verdict_color(verdict):
     }.get(verdict, "#9ca3af")
 
 
+# ── Groq key check ──────────────────────────────────────────────────────
+# Hosted Streamlit REDACTS the text of uncaught exceptions, so raising from
+# deep in the call stack shows the user nothing useful. Check up front and
+# render the guidance with st.error, which is app output and displays normally.
+
+def groq_key_present() -> bool:
+    return bool(get_secret("GROQ_API_KEY"))
+
+
+def render_missing_key_error() -> None:
+    visible = available_secret_names()
+    st.error("No Groq API key found — the steps that call the LLM can't run yet.")
+    st.markdown(
+        "**To fix this on the deployed app:** open *Manage app → Settings → Secrets* "
+        "and make sure the box starts with this, above any `[section]` header:"
+    )
+    st.code('GROQ_API_KEY = "gsk_your_key_here"', language="toml")
+    st.markdown(
+        "Save it, wait about a minute, then reboot the app. "
+        "A free key comes from [console.groq.com](https://console.groq.com). "
+        "**Running locally?** Copy `.env.example` to `.env` and add the key there."
+    )
+    if visible:
+        st.caption("Secret names currently visible to the app: " + ", ".join(visible))
+    else:
+        st.caption("The app currently sees no secrets at all.")
+
+
 def render_job_card(job: dict):
     source   = job.get("source", "")
     title    = job.get("title", "No Title")
@@ -436,6 +465,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 render_stepper()
+
+# Warn once, at the top of every step, rather than letting the first LLM call
+# blow up with a message the host strips out of the traceback.
+if not groq_key_present():
+    render_missing_key_error()
+    st.divider()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -623,15 +658,21 @@ elif st.session_state.step == "skills":
             st.session_state.step = "upload"; st.rerun()
     with col2:
         if st.button("Run LLM Analysis →", use_container_width=True, type="primary"):
-            with st.spinner("🤖 Analyzing resume against job description..."):
-                analysis = analyze_resume_vs_jd(
-                    st.session_state.resume_context,
-                    st.session_state.jd_context,
-                    st.session_state.job_title,
-                )
-                st.session_state.analysis = analysis
-            st.session_state.step = "analyze"
-            st.rerun()
+            if not groq_key_present():
+                render_missing_key_error()
+            else:
+                try:
+                    with st.spinner("🤖 Analyzing resume against job description..."):
+                        analysis = analyze_resume_vs_jd(
+                            st.session_state.resume_context,
+                            st.session_state.jd_context,
+                            st.session_state.job_title,
+                        )
+                        st.session_state.analysis = analysis
+                    st.session_state.step = "analyze"
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Analysis failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
